@@ -1,144 +1,315 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Unstable_Grid2';
 import Pagination from '@mui/material/Pagination';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Modal from '@mui/material/Modal';
+import TextField from '@mui/material/TextField';
+import Select, { SelectChangeEvent } from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Card from '@mui/material/Card';
+import CircularProgress from '@mui/material/CircularProgress';
+import AddIcon from '@mui/icons-material/Add';
 
-import { _products } from 'src/_mock';
+import axios from 'axios';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-
 import { ProductItem } from '../product-item';
-import { ProductSort } from '../product-sort';
 import { CartIcon } from '../product-cart-widget';
-import { ProductFilters } from '../product-filters';
 
-import type { FiltersProps } from '../product-filters';
+import type { ProductItemProps } from '../product-item';
 
-// ----------------------------------------------------------------------
-
-const GENDER_OPTIONS = [
-  { value: 'men', label: 'Men' },
-  { value: 'women', label: 'Women' },
-  { value: 'kids', label: 'Kids' },
-];
-
-const CATEGORY_OPTIONS = [
-  { value: 'all', label: 'All' },
-  { value: 'shose', label: 'Shose' },
-  { value: 'apparel', label: 'Apparel' },
-  { value: 'accessories', label: 'Accessories' },
-];
-
-const RATING_OPTIONS = ['up4Star', 'up3Star', 'up2Star', 'up1Star'];
-
-const PRICE_OPTIONS = [
-  { value: 'below', label: 'Below $25' },
-  { value: 'between', label: 'Between $25 - $75' },
-  { value: 'above', label: 'Above $75' },
-];
-
-const COLOR_OPTIONS = [
-  '#00AB55',
-  '#000000',
-  '#FFFFFF',
-  '#FFC0CB',
-  '#FF4842',
-  '#1890FF',
-  '#94D82D',
-  '#FFC107',
-];
-
-const defaultFilters = {
-  price: '',
-  gender: [GENDER_OPTIONS[0].value],
-  colors: [COLOR_OPTIONS[4]],
-  rating: RATING_OPTIONS[0],
-  category: CATEGORY_OPTIONS[0].value,
+const modalStyle = {
+  position: 'absolute' as 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 600,
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+  borderRadius: 2,
 };
 
 export function ProductsView() {
-  const [sortBy, setSortBy] = useState('featured');
+  const [products, setProducts] = useState<ProductItemProps[]>([]);
+  const [categories, setCategories] = useState([]);
+  const [localizations, setLocalizations] = useState([]);
 
-  const [openFilter, setOpenFilter] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingImage, setLoadingImage] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    description: '',
+    price: 0,
+    code: '',
+    quantity: 0,
+    categoryId: '',
+    localizationId: '',
+    image_url: '',
+  });
 
-  const [filters, setFilters] = useState<FiltersProps>(defaultFilters);
-
-  const handleOpenFilter = useCallback(() => {
-    setOpenFilter(true);
+  const fetchProducts = useCallback(async () => {
+    try {
+      const response = await axios.get('https://stock-admin-backend.vercel.app/products');
+      const formattedProducts = response.data.map((product: any) => ({
+        id: product._id,
+        name: product.name,
+        price: product.price,
+        status: product.status || 'available',
+        coverUrl: product.image_url,
+        colors: product.colors || [],
+        priceSale: product.priceSale || null,
+      }));
+      setProducts(formattedProducts);
+      setLoadingProducts(false);
+    } catch (error) {
+      console.error('Erro ao buscar produtos:', error);
+      setLoadingProducts(false);
+    }
   }, []);
 
-  const handleCloseFilter = useCallback(() => {
-    setOpenFilter(false);
-  }, []);
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get('https://stock-admin-backend.vercel.app/categories');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Erro ao buscar categorias:', error);
+    }
+  };
 
-  const handleSort = useCallback((newSort: string) => {
-    setSortBy(newSort);
-  }, []);
+  const fetchLocalizations = async () => {
+    try {
+      const response = await axios.get('https://stock-admin-backend.vercel.app/localizations');
+      setLocalizations(response.data);
+    } catch (error) {
+      console.error('Erro ao buscar localizações:', error);
+    }
+  };
 
-  const handleSetFilters = useCallback((updateState: Partial<FiltersProps>) => {
-    setFilters((prevValue) => ({ ...prevValue, ...updateState }));
-  }, []);
+  useEffect(() => {
+    fetchProducts();
+    fetchCategories();
+    fetchLocalizations();
+  }, [fetchProducts]);
 
-  const canReset = Object.keys(filters).some(
-    (key) => filters[key as keyof FiltersProps] !== defaultFilters[key as keyof FiltersProps]
-  );
+  const handleOpenModal = () => setOpenModal(true);
+  const handleCloseModal = () => setOpenModal(false);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewProduct((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setNewProduct((prev) => ({ ...prev, [name as string]: value }));
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      setLoadingImage(true);
+
+      try {
+        const response = await axios.post(
+          'https://stock-admin-backend.vercel.app/upload',
+          formData,
+          {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          }
+        );
+        setNewProduct((prev) => ({ ...prev, image_url: response.data.image }));
+      } catch (error) {
+        console.error('Erro ao fazer upload da imagem:', error);
+      } finally {
+        setLoadingImage(false);
+      }
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    try {
+      await axios.post('https://stock-admin-backend.vercel.app/products', {
+        ...newProduct,
+        quantity: Number(newProduct.quantity),
+        price: Number(newProduct.price),
+      });
+      fetchProducts();
+      handleCloseModal();
+    } catch (error) {
+      console.error('Erro ao criar produto:', error);
+    }
+  };
 
   return (
     <DashboardContent>
       <Typography variant="h4" sx={{ mb: 5 }}>
-        Products
+        Produtos
       </Typography>
+
+      <Button
+        variant="contained"
+        startIcon={<AddIcon />}
+        onClick={handleOpenModal}
+        size="small"
+        sx={{
+          mb: 3,
+          maxWidth: '200px', // largura máxima do botão
+          width: 'fit-content', // ajusta para o conteúdo
+          px: 2, // padding horizontal para controlar o espaçamento interno
+        }}
+      >
+        Adicionar Produto
+      </Button>
 
       <CartIcon totalItems={8} />
 
-      <Box
-        display="flex"
-        alignItems="center"
-        flexWrap="wrap-reverse"
-        justifyContent="flex-end"
-        sx={{ mb: 5 }}
-      >
-        <Box gap={1} display="flex" flexShrink={0} sx={{ my: 1 }}>
-          <ProductFilters
-            canReset={canReset}
-            filters={filters}
-            onSetFilters={handleSetFilters}
-            openFilter={openFilter}
-            onOpenFilter={handleOpenFilter}
-            onCloseFilter={handleCloseFilter}
-            onResetFilter={() => setFilters(defaultFilters)}
-            options={{
-              genders: GENDER_OPTIONS,
-              categories: CATEGORY_OPTIONS,
-              ratings: RATING_OPTIONS,
-              price: PRICE_OPTIONS,
-              colors: COLOR_OPTIONS,
-            }}
-          />
-
-          <ProductSort
-            sortBy={sortBy}
-            onSort={handleSort}
-            options={[
-              { value: 'featured', label: 'Featured' },
-              { value: 'newest', label: 'Newest' },
-              { value: 'priceDesc', label: 'Price: High-Low' },
-              { value: 'priceAsc', label: 'Price: Low-High' },
-            ]}
-          />
+      {loadingProducts ? (
+        <Box display="flex" justifyContent="center" alignItems="center" sx={{ mt: 5 }}>
+          <CircularProgress />
         </Box>
-      </Box>
-
-      <Grid container spacing={3}>
-        {_products.map((product) => (
-          <Grid key={product.id} xs={12} sm={6} md={3}>
-            <ProductItem product={product} />
-          </Grid>
-        ))}
-      </Grid>
+      ) : (
+        <Grid container spacing={3}>
+          {products.map((product) => (
+            <Grid key={product.id} xs={12} sm={6} md={3}>
+              <ProductItem product={product} />
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
       <Pagination count={10} color="primary" sx={{ mt: 8, mx: 'auto' }} />
+
+      <Modal open={openModal} onClose={handleCloseModal}>
+        <Card sx={modalStyle}>
+          <Typography variant="h6" component="h2" gutterBottom>
+            Criar Produto
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid xs={12} md={6}>
+              <TextField
+                label="Nome"
+                name="name"
+                value={newProduct.name}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+              />
+            </Grid>
+            <Grid xs={12} md={6}>
+              <TextField
+                label="Descrição"
+                name="description"
+                value={newProduct.description}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+              />
+            </Grid>
+            <Grid xs={12} md={6}>
+              <TextField
+                label="Preço"
+                name="price"
+                type="number"
+                value={Number(newProduct.price)}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+              />
+            </Grid>
+            <Grid xs={12} md={6}>
+              <TextField
+                label="Código"
+                name="code"
+                value={newProduct.code}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+              />
+            </Grid>
+            <Grid xs={12} md={6}>
+              <TextField
+                label="Quantidade"
+                name="quantity"
+                type="number"
+                value={Number(newProduct.quantity)}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+              />
+            </Grid>
+            <Grid xs={12} md={6}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Categoria</InputLabel>
+                <Select
+                  name="categoryId"
+                  value={newProduct.categoryId}
+                  onChange={handleSelectChange}
+                >
+                  {categories.map((category: any) => (
+                    <MenuItem key={category._id} value={category._id}>
+                      {category.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid xs={12} md={6}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Localização</InputLabel>
+                <Select
+                  name="localizationId"
+                  value={newProduct.localizationId}
+                  onChange={handleSelectChange}
+                >
+                  {localizations.map((localization: any) => (
+                    <MenuItem key={localization._id} value={localization._id}>
+                      {localization.address}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid xs={12} md={6}>
+              <Button variant="outlined" component="label" fullWidth sx={{ mt: 2 }}>
+                Upload Imagem
+                <input type="file" hidden onChange={handleImageUpload} />
+              </Button>
+              {loadingImage && (
+                <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              )}
+            </Grid>
+            {newProduct.image_url && (
+              <Grid xs={12} md={6}>
+                <Box
+                  component="img"
+                  src={newProduct.image_url}
+                  alt="Imagem do produto"
+                  sx={{ width: '100%', height: 150, objectFit: 'cover', mt: 2 }}
+                />
+              </Grid>
+            )}
+          </Grid>
+          <Button
+            variant="contained"
+            onClick={handleCreateProduct}
+            sx={{ mt: 2 }}
+            disabled={loadingImage}
+          >
+            Criar Produto
+          </Button>
+        </Card>
+      </Modal>
     </DashboardContent>
   );
 }

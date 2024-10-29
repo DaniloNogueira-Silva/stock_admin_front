@@ -5,17 +5,17 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import { fCurrency } from 'src/utils/format-number';
-
 import { Label } from 'src/components/label';
 import { ColorPreview } from 'src/components/color-utils';
 
-// ----------------------------------------------------------------------
+// Placeholder para imagem
+const placeholderImage = 'https://via.placeholder.com/150';
 
 export type ProductItemProps = {
   id: string;
   name: string;
   price: number;
-  status: string;
+  quantity: number;
   coverUrl: string;
   colors: string[];
   priceSale: number | null;
@@ -25,7 +25,7 @@ export function ProductItem({ product }: { product: ProductItemProps }) {
   const renderStatus = (
     <Label
       variant="inverted"
-      color={(product.status === 'sale' && 'error') || 'info'}
+      color={product.quantity < 10 ? 'error' : 'success'} // Define a cor baseada na quantidade
       sx={{
         zIndex: 9,
         top: 16,
@@ -34,7 +34,7 @@ export function ProductItem({ product }: { product: ProductItemProps }) {
         textTransform: 'uppercase',
       }}
     >
-      {product.status}
+      {product.quantity < 10 ? 'Estoque Baixo' : 'Em Estoque'}
     </Label>
   );
 
@@ -42,13 +42,17 @@ export function ProductItem({ product }: { product: ProductItemProps }) {
     <Box
       component="img"
       alt={product.name}
-      src={product.coverUrl}
+      src={product.coverUrl || placeholderImage}
+      onError={(e) => {
+        e.currentTarget.src = placeholderImage; // Atribuição separada
+      }}
       sx={{
         top: 0,
         width: 1,
         height: 1,
         objectFit: 'cover',
         position: 'absolute',
+        borderRadius: 1, // Ajuste opcional de estilo
       }}
     />
   );
@@ -73,8 +77,7 @@ export function ProductItem({ product }: { product: ProductItemProps }) {
   return (
     <Card>
       <Box sx={{ pt: '100%', position: 'relative' }}>
-        {product.status && renderStatus}
-
+        {renderStatus}
         {renderImg}
       </Box>
 
